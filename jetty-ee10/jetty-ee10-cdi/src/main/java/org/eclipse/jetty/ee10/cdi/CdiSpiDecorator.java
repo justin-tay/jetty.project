@@ -55,6 +55,7 @@ public class CdiSpiDecorator implements Decorator
     private final MethodHandle _current;
     private final MethodHandle _getBeanManager;
     private final MethodHandle _createAnnotatedType;
+    private final MethodHandle _getInjectionTargetFactory;
     private final MethodHandle _createInjectionTarget;
     private final MethodHandle _createCreationalContext;
     private final MethodHandle _inject;
@@ -75,15 +76,18 @@ public class CdiSpiDecorator implements Decorator
             Class<?> cdiClass = classLoader.loadClass("jakarta.enterprise.inject.spi.CDI");
             Class<?> beanManagerClass = classLoader.loadClass("jakarta.enterprise.inject.spi.BeanManager");
             Class<?> annotatedTypeClass = classLoader.loadClass("jakarta.enterprise.inject.spi.AnnotatedType");
+            Class<?> injectionTargetFactoryClass = classLoader.loadClass("jakarta.enterprise.inject.spi.InjectionTargetFactory");
             Class<?> injectionTargetClass = classLoader.loadClass("jakarta.enterprise.inject.spi.InjectionTarget");
             Class<?> creationalContextClass = classLoader.loadClass("jakarta.enterprise.context.spi.CreationalContext");
             Class<?> contextualClass = classLoader.loadClass("jakarta.enterprise.context.spi.Contextual");
+            Class<?> beanClass = classLoader.loadClass("jakarta.enterprise.inject.spi.Bean");
 
             MethodHandles.Lookup lookup = MethodHandles.lookup();
             _current = lookup.findStatic(cdiClass, "current", MethodType.methodType(cdiClass));
             _getBeanManager = lookup.findVirtual(cdiClass, "getBeanManager", MethodType.methodType(beanManagerClass));
             _createAnnotatedType = lookup.findVirtual(beanManagerClass, "createAnnotatedType", MethodType.methodType(annotatedTypeClass, Class.class));
-            _createInjectionTarget = lookup.findVirtual(beanManagerClass, "createInjectionTarget", MethodType.methodType(injectionTargetClass, annotatedTypeClass));
+            _getInjectionTargetFactory = lookup.findVirtual(beanManagerClass, "getInjectionTargetFactory", MethodType.methodType(injectionTargetFactoryClass, annotatedTypeClass));
+            _createInjectionTarget = lookup.findVirtual(injectionTargetFactoryClass, "createInjectionTarget", MethodType.methodType(injectionTargetClass, beanClass));
             _createCreationalContext = lookup.findVirtual(beanManagerClass, "createCreationalContext", MethodType.methodType(creationalContextClass, contextualClass));
             _inject = lookup.findVirtual(injectionTargetClass, "inject", MethodType.methodType(Void.TYPE, Object.class, creationalContextClass));
             _dispose = lookup.findVirtual(injectionTargetClass, "dispose", MethodType.methodType(Void.TYPE, Object.class));
@@ -203,8 +207,10 @@ public class CdiSpiDecorator implements Decorator
             Object annotatedType = _createAnnotatedType.invoke(manager, o.getClass());
             // CreationalContext creationalContext = manager.createCreationalContext(null);
             _creationalContext = _createCreationalContext.invoke(manager, null);
-            // InjectionTarget injectionTarget = manager.createInjectionTarget();
-            _injectionTarget = _createInjectionTarget.invoke(manager, annotatedType);
+            // InjectionTargetFactory injectionTargetFactory = manager.getInjectionTargetFactory();
+            Object injectionTargetFactory = _getInjectionTargetFactory.invoke(manager, annotatedType);
+            // InjectionTarget injectionTarget = injectionTargetFactory.createInjectionTarget(null);
+            _injectionTarget = _createInjectionTarget.invoke(injectionTargetFactory, null);
             // injectionTarget.inject(o, creationalContext);
             _inject.invoke(_injectionTarget, o, _creationalContext);
         }
